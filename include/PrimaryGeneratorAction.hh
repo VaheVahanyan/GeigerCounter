@@ -21,6 +21,7 @@
 
 #include "EventAction.hh"
 #include "Geometry.hh"
+#include "GenSurface.hh"
 #include "Flux/Flux.hh"
 #include "Flux/UniformFlux.hh"
 #include "Flux/PLAWFlux.hh"
@@ -40,9 +41,8 @@ public:
 private:
     G4ParticleGun *particleGun = nullptr;
 
-    G4double radius;
+    GenSurface genSurface;
     G4ThreeVector center;
-    G4ThreeVector detectorHalfSize;
 
     G4String fluxDirection;
     ParticleInfo pInfo{};

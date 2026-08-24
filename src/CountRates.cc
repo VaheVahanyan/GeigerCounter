@@ -244,23 +244,8 @@ double fluxGalactic(const double E, const double phiMV, const std::string& name)
     return num / den * J_LIS;
 }
 
-// ---------------- Area ----------------
-
-double Area_cm2(const double R_mm, const double H_mm, const FluxDir dir) {
-    const double R_cm = R_mm / 10.0;
-    const double H_cm = H_mm / 10.0;
-
-    if (dir == FluxDir::Vertical_up || dir == FluxDir::Vertical_down) {
-        return M_PI * R_cm * R_cm;
-    }
-    if (dir == FluxDir::Horizontal) {
-        return 2 * R_cm * H_cm;
-    }
-    const double val = std::sqrt(R_cm * R_cm + H_cm * H_cm) + 0.5;
-    if (dir == FluxDir::Isotropic_down || dir == FluxDir::Isotropic_up) {
-        return 2.0 * M_PI * M_PI * val * val;
-    }
-    return 4.0 * M_PI * M_PI * val * val;
+double fluxGalactic_cm2_MeV(const double E_MeV, const double phiMV, const std::string& name) {
+    return fluxGalactic(E_MeV * 1e-3, phiMV, name) * 1e-7;
 }
 
 // ---------------- Integral ----------------
@@ -337,15 +322,11 @@ RateResult computeRate(const FluxType type,
             return fluxUniform(E, eRange.Emin, eRange.Emax, Configuration::isLogBin);
         };
         break;
-    case FluxType::GALACTIC: {
-        eRange.Emin /= 1000.0;
-        eRange.Emax /= 1000.0;
-        A_cm2 /= 10000.0;
-        f = [=](const double E_GeV) {
-            return fluxGalactic(E_GeV, p.phiMV, p.particle);
+    case FluxType::GALACTIC:
+        f = [=](const double E_MeV) {
+            return fluxGalactic_cm2_MeV(E_MeV, p.phiMV, p.particle);
         };
         break;
-    }
     default:
         throw std::runtime_error("Unknown flux type");
     }
@@ -357,28 +338,24 @@ RateResult computeRate(const FluxType type,
     R.area = A_cm2;
     R.integral = integral;
     R.Ndot = Ndot;
-    R.rateCrystal = N_histories > 0 ? (detCounts.both + 0.0) * Ndot / N_histories : 0.0;
-    const int bothDet = detCounts.both + detCounts.both;
-    R.rateBoth = N_histories > 0 ? (bothDet + 0.0) * Ndot / N_histories : 0.0;
+    R.rate1 = N_histories > 0 ? (detCounts.N1() + 0.0) * Ndot / N_histories : 0.0;
+    R.rateTel = N_histories > 0 ? (detCounts.NTelescope() + 0.0) * Ndot / N_histories : 0.0;
     return R;
 }
 
 RateResult computeRateReal(FluxType type,
                            const FluxParams& p,
                            EnergyRange eRange,
-                           const std::vector<double>& Aeff,
+                           const std::vector<double>& Aeff1,
+                           const std::vector<double>& AeffTel,
                            int nBins) {
     if (nBins <= 0) throw std::runtime_error("computeRateReal: nBins <= 0");
-    if (static_cast<int>(Aeff.size()) != nBins)
+    if (static_cast<int>(Aeff1.size()) != nBins || static_cast<int>(AeffTel.size()) != nBins)
         throw std::runtime_error("computeRateReal: Aeff.size() != nBins");
     if (eRange.Emin <= 0.0 || eRange.Emax <= 0.0 || eRange.Emax <= eRange.Emin)
         throw std::runtime_error("computeRateReal: invalid energy range");
 
     std::function<double(double)> fluxF;
-
-
-    double areaScale = 1.0;
-    double energyScale = 1.0;
 
     switch (type) {
     case FluxType::PLAW:
@@ -407,40 +384,30 @@ RateResult computeRateReal(FluxType type,
         };
         break;
     case FluxType::GALACTIC:
-        energyScale = 1.0 / 1000.0;
-        areaScale = 1.0 / 10000.0;
-        fluxF = [=](double E_GeV) {
-            return fluxGalactic(E_GeV, p.phiMV, p.particle);
+        fluxF = [=](double E_MeV) {
+            return fluxGalactic_cm2_MeV(E_MeV, p.phiMV, p.particle);
         };
         break;
     default:
         throw std::runtime_error("computeRateReal: unknown flux type");
     }
 
-    double rateReal = 0.0;
+    double rateReal1 = 0.0;
+    double rateRealTel = 0.0;
 
     for (int i = 0; i < nBins; ++i) {
         const double e1 = binEdge(eRange.Emin, eRange.Emax, nBins, i, Configuration::isLogBin);
         const double e2 = binEdge(eRange.Emin, eRange.Emax, nBins, i + 1, Configuration::isLogBin);
-        double Ec;
-        if (Configuration::isLogBin) {
-            Ec = std::sqrt(e1 * e2);
-        } else {
-            Ec = 0.5 * (e1 + e2);
-        }
+        const double Ec = Configuration::isLogBin ? std::sqrt(e1 * e2) : 0.5 * (e1 + e2);
         const double dE = e2 - e1;
 
-        double A = Aeff[i];
-
-        const double Earg = Ec * energyScale;
-        const double dEarg = dE * energyScale;
-        const double Aarg = A * areaScale;
-
-        const double phi = fluxF(Earg);
-        rateReal += phi * Aarg * dEarg;
+        const double phi = fluxF(Ec);
+        rateReal1 += phi * Aeff1[i] * dE;
+        rateRealTel += phi * AeffTel[i] * dE;
     }
 
     RateResult R;
-    R.rateRealCrystal = rateReal;
+    R.rateReal1 = rateReal1;
+    R.rateRealTel = rateRealTel;
     return R;
 }

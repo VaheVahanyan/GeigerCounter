@@ -157,12 +157,10 @@ void Detector::ConstructBox() {
     new G4PVPlacement(nullptr, G4ThreeVector(0, 0, -Box::thickness), boxLV, "BoxPVP", detContainerLV, false, 0,
                       true);
 
-    if (withLid) {
-        G4VSolid* lid = new G4Box("Lid", Box::length, Box::width, Box::thickness);
-        lidLV = new G4LogicalVolume(lid, boxMat, "LidLV");
-        lidLV->SetVisAttributes(visLid);
-        new G4PVPlacement(nullptr, G4ThreeVector(0, 0, Box::height), lidLV, "LidPVP", detContainerLV, false, 0, true);
-    }
+    G4VSolid* lid = new G4Box("Lid", Box::length, Box::width, Box::thickness);
+    lidLV = new G4LogicalVolume(lid, boxMat, "LidLV");
+    lidLV->SetVisAttributes(visLid);
+    new G4PVPlacement(nullptr, G4ThreeVector(0, 0, Box::height), lidLV, "LidPVP", detContainerLV, false, 0, true);
 }
 
 void Detector::ConstructGeigerTube() {

@@ -3,14 +3,10 @@
 
 PrimaryGeneratorAction::PrimaryGeneratorAction(G4String fDir, const G4String& fluxType, const G4double cThreshold)
     : particleGun(new G4ParticleGun(1)),
-      center(G4ThreeVector(0, 0, 0)),
-      detectorHalfSize(Sizes::Box::length, Sizes::Box::width, Sizes::Box::height + Sizes::Box::thickness),
       fluxDirection(std::move(fDir)),
       eCrystalThreshold(cThreshold) {
-    const G4ThreeVector tempVec = G4ThreeVector(0,
-                                                detectorHalfSize.y(),
-                                                detectorHalfSize.z());
-    radius = sqrt(tempVec.y() * tempVec.y() + tempVec.z() * tempVec.z()) + 5 * mm;
+    genSurface = GenSurface::For(fluxDirection);
+    center = genSurface.Origin();
 
     std::vector<G4String> fluxDirList = {
         "isotropic", "isotropic_up", "isotropic_down", "vertical_up", "vertical_down", "horizontal"
@@ -63,7 +59,7 @@ void PrimaryGeneratorAction::GenerateOnSphere(G4ThreeVector& pos, G4ThreeVector&
     const G4double l = std::sqrt(std::max(0.0, 1.0 - u * u));
     const G4ThreeVector rhat(l * std::cos(phi), l * std::sin(phi), u);
 
-    pos = center + radius * rhat;
+    pos = center + genSurface.Radius() * rhat;
 
     const G4ThreeVector z = rhat.unit();
     const G4ThreeVector a = std::fabs(z.z()) < 0.999 ? G4ThreeVector(0, 0, 1) : G4ThreeVector(1, 0, 0);
@@ -84,30 +80,13 @@ void PrimaryGeneratorAction::GenerateOnSphere(G4ThreeVector& pos, G4ThreeVector&
 
 void PrimaryGeneratorAction::GeneratePrimaries(G4Event* evt) {
     G4ThreeVector x, v;
-    if (fluxDirection == "vertical_up") {
-        v = G4ThreeVector(0., 0., 1.);
-        const G4double r = std::sqrt(G4UniformRand()) * detectorHalfSize.y(); // 1 * mm;
-        const G4double phi = G4UniformRand() * 2 * pi;
-        const G4double x_ = r * std::cos(phi);
-        const G4double y_ = r * std::sin(phi);
-        const G4double z_ = -radius;
-        x = G4ThreeVector(x_, y_, z_);
-    } else if (fluxDirection == "vertical_down") {
-        v = G4ThreeVector(0., 0., -1.);
-        const G4double r = std::sqrt(G4UniformRand()) * detectorHalfSize.y(); // 1 * mm;
-        const G4double phi = G4UniformRand() * 2 * pi;
-        const G4double x_ = r * std::cos(phi);
-        const G4double y_ = r * std::sin(phi);
-        const G4double z_ = radius;
-        x = G4ThreeVector(x_, y_, z_);
-    } else if (fluxDirection == "horizontal") {
-        v = G4ThreeVector(-1., 0., 0.);
-        const G4double x_ = radius;
-        const G4double y_ = 2 * (G4UniformRand() - 0.5) * detectorHalfSize.y(); // 1 * mm;
-        const G4double z_ = (G4UniformRand() - 0.5) * detectorHalfSize.z();     // 1 * mm;
-        x = G4ThreeVector(x_, y_, z_);
-    } else {
+    if (genSurface.IsIsotropic()) {
         GenerateOnSphere(x, v);
+    } else {
+        v = genSurface.Axis();
+        const G4double a = (2.0 * G4UniformRand() - 1.0) * genSurface.HalfU();
+        const G4double b = (2.0 * G4UniformRand() - 1.0) * genSurface.HalfV();
+        x = center + genSurface.U() * a + genSurface.V() * b - v * genSurface.Standoff();
     }
     ParticleInfo info = flux->GenerateParticle();
 

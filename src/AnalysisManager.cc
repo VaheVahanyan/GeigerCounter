@@ -23,10 +23,11 @@ void AnalysisManager::Book() {
 #ifdef G4MULTITHREADED
     analysisManager->SetNtupleMerging(true);
 #endif
-    edepNT = analysisManager->CreateNtuple("edep", "energy deposition per sensitive channel");
+    edepNT = analysisManager->CreateNtuple("edep", "energy deposit per counter, one row per event with a deposit");
     analysisManager->CreateNtupleIColumn("eventID");
-    analysisManager->CreateNtupleSColumn("det_name");
-    analysisManager->CreateNtupleDColumn("edep_MeV");
+    analysisManager->CreateNtupleDColumn("E0_MeV");
+    analysisManager->CreateNtupleDColumn("edep1_eV");
+    analysisManager->CreateNtupleDColumn("edep2_eV");
     analysisManager->FinishNtuple(edepNT);
 
     primaryNT = analysisManager->CreateNtuple("primary", "per-primary particles");
@@ -74,22 +75,27 @@ void AnalysisManager::Book() {
         const G4String unit = "MeV";
         G4String logScheme = isLogBin ? "log" : "linear";
 
+        const G4String suffix[nChannels] = {"", "Tel"};
+        const G4String label[nChannels] = {"counter 1", "telescope"};
+
         genEnergyHist = analysisManager->CreateH1("genEnergyHist",
                                                   "N_{gen} vs E",
                                                   nBins, Emin, Emax, unit, "none", logScheme);
 
-        trigEnergyHist = analysisManager->CreateH1("trigEnergyHist",
-                                                   "N_{trig} vs E",
-                                                   nBins, Emin, Emax, unit, "none", logScheme);
+        for (G4int c = 0; c < nChannels; ++c) {
+            trigEnergyHist[c] = analysisManager->CreateH1("trigEnergyHist" + suffix[c],
+                                                          "N_{trig} vs E, " + label[c],
+                                                          nBins, Emin, Emax, unit, "none", logScheme);
 
-        if (fluxDirection.find("isotropic") != std::string::npos) {
-            sensitivityHist = analysisManager->CreateH1("sensitivityHist",
-                                                        "Sensitivity vs E",
-                                                        nBins, Emin, Emax, unit, "none", logScheme);
-        } else {
-            effAreaHist = analysisManager->CreateH1("effAreaHist",
-                                                    "A_{eff} vs E",
-                                                    nBins, Emin, Emax, unit, "none", logScheme);
+            if (fluxDirection.find("isotropic") != std::string::npos) {
+                sensitivityHist[c] = analysisManager->CreateH1("sensitivityHist" + suffix[c],
+                                                               "Sensitivity vs E, " + label[c],
+                                                               nBins, Emin, Emax, unit, "none", logScheme);
+            } else {
+                effAreaHist[c] = analysisManager->CreateH1("effAreaHist" + suffix[c],
+                                                           "A_{eff} vs E, " + label[c],
+                                                           nBins, Emin, Emax, unit, "none", logScheme);
+            }
         }
     }
 }
@@ -154,89 +160,31 @@ void AnalysisManager::FillInteractionRow(G4int eventID,
     analysisManager->AddNtupleRow(interactionsNT);
 }
 
-void AnalysisManager::FillEdepRow(G4int eventID, const G4String& det_name, G4double edep_MeV) {
+void AnalysisManager::FillEdepRow(G4int eventID, G4double E0_MeV, G4double edep1_eV, G4double edep2_eV) {
     G4AnalysisManager* analysisManager = G4AnalysisManager::Instance();
     analysisManager->FillNtupleIColumn(edepNT, 0, eventID);
-    analysisManager->FillNtupleSColumn(edepNT, 1, det_name);
-    analysisManager->FillNtupleDColumn(edepNT, 2, edep_MeV);
+    analysisManager->FillNtupleDColumn(edepNT, 1, E0_MeV);
+    analysisManager->FillNtupleDColumn(edepNT, 2, edep1_eV);
+    analysisManager->FillNtupleDColumn(edepNT, 3, edep2_eV);
     analysisManager->AddNtupleRow(edepNT);
 }
 
-void AnalysisManager::FillSiPMEventRow(int eventID, int npeC, int npeV, int npeBV) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillNtupleIColumn(SiPMEventNT, 0, eventID);
-    analysisManager->FillNtupleIColumn(SiPMEventNT, 1, npeC);
-    analysisManager->FillNtupleIColumn(SiPMEventNT, 2, npeV);
-    analysisManager->FillNtupleIColumn(SiPMEventNT, 3, npeBV);
-    analysisManager->AddNtupleRow(SiPMEventNT);
-}
-
-void AnalysisManager::FillSiPMChannelRow(int eventID, const G4String& subdet, int ch, int npe) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillNtupleIColumn(SiPMChannelNT, 0, eventID);
-    analysisManager->FillNtupleSColumn(SiPMChannelNT, 1, subdet);
-    analysisManager->FillNtupleIColumn(SiPMChannelNT, 2, ch);
-    analysisManager->FillNtupleIColumn(SiPMChannelNT, 3, npe);
-    analysisManager->AddNtupleRow(SiPMChannelNT);
-}
-
-void AnalysisManager::FillPhotonCountRow(G4int eventID,
-                                         G4int npeCrystal, G4int npeVeto,
-                                         G4int npeBottomVeto) {
-    G4AnalysisManager* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillNtupleIColumn(photonsCountNT, 0, eventID);
-    analysisManager->FillNtupleIColumn(photonsCountNT, 1, npeCrystal);
-    analysisManager->FillNtupleIColumn(photonsCountNT, 2, npeVeto);
-    analysisManager->FillNtupleIColumn(photonsCountNT, 3, npeBottomVeto);
-    analysisManager->AddNtupleRow(photonsCountNT);
-}
-
-void AnalysisManager::FillPhotonRow(G4int eventID, G4int photonID, const G4String& det_name, G4int det_ch,
-                                    G4double energy_eV, G4double x_mm, G4double y_mm, G4double z_mm) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillNtupleIColumn(photonsNT, 0, eventID);
-    analysisManager->FillNtupleIColumn(photonsNT, 1, photonID);
-    analysisManager->FillNtupleSColumn(photonsNT, 2, det_name);
-    analysisManager->FillNtupleIColumn(photonsNT, 3, det_ch);
-    analysisManager->FillNtupleDColumn(photonsNT, 4, energy_eV);
-    analysisManager->FillNtupleDColumn(photonsNT, 5, x_mm);
-    analysisManager->FillNtupleDColumn(photonsNT, 6, y_mm);
-    analysisManager->FillNtupleDColumn(photonsNT, 7, z_mm);
-    analysisManager->AddNtupleRow(photonsNT);
-}
-
-
 void AnalysisManager::FillGenEnergyHist(G4double E_MeV, G4double weight) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(genEnergyHist, E_MeV, weight);
+    if (genEnergyHist < 0) return;
+    G4AnalysisManager::Instance()->FillH1(genEnergyHist, E_MeV, weight);
 }
 
-void AnalysisManager::FillTrigEnergyHist(G4double E_MeV, G4double weight) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(trigEnergyHist, E_MeV, weight);
+void AnalysisManager::FillTrigEnergyHist(G4int channel, G4double E_MeV, G4double weight) {
+    if (channel < 0 || channel >= nChannels || trigEnergyHist[channel] < 0) return;
+    G4AnalysisManager::Instance()->FillH1(trigEnergyHist[channel], E_MeV, weight);
 }
 
-void AnalysisManager::FillTrigOptEnergyHist(G4double E_MeV, G4double weight) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(trigOptEnergyHist, E_MeV, weight);
+void AnalysisManager::FillEffAreaHist(G4int channel, G4double E_MeV, G4double value) {
+    if (channel < 0 || channel >= nChannels || effAreaHist[channel] < 0) return;
+    G4AnalysisManager::Instance()->FillH1(effAreaHist[channel], E_MeV, value);
 }
 
-void AnalysisManager::FillEffAreaHist(G4double E_MeV, G4double value) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(effAreaHist, E_MeV, value);
-}
-
-void AnalysisManager::FillEffAreaOptHist(G4double E_MeV, G4double value) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(effAreaOptHist, E_MeV, value);
-}
-
-void AnalysisManager::FillSensitivityHist(G4double E_MeV, G4double value) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(sensitivityHist, E_MeV, value);
-}
-
-void AnalysisManager::FillSensitivityOptHist(G4double E_MeV, G4double value) {
-    auto* analysisManager = G4AnalysisManager::Instance();
-    analysisManager->FillH1(sensitivityOptHist, E_MeV, value);
+void AnalysisManager::FillSensitivityHist(G4int channel, G4double E_MeV, G4double value) {
+    if (channel < 0 || channel >= nChannels || sensitivityHist[channel] < 0) return;
+    G4AnalysisManager::Instance()->FillH1(sensitivityHist[channel], E_MeV, value);
 }

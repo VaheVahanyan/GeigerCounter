@@ -9,7 +9,6 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
-#include <set>
 #include <sstream>
 #include <filesystem>
 
@@ -31,32 +30,27 @@ class TH1;
 class PostProcessing {
 public:
     PostProcessing(std::string outputFolderName,
-                   std::string particle);
+                   std::string particle,
+                   double norm_cm2,
+                   bool isotropic);
 
     ~PostProcessing();
 
     void ExtractNtData();
-    void SaveEffArea();
-    void SaveSensitivity();
-
-    void SaveTrigEdepCsv();
-    void SavePrimaryCsv();
-    void SaveEdepCsv();
-
-    void SaveOpticsCsv();
+    void SaveResponse();
 
 private:
     std::string outputFolderName;
     double eMinMeV;
     double eMaxMeV;
     std::string particleName;
+    double norm;
+    bool isotropic;
 
     std::unique_ptr<TFile> rootFile;
 
     std::string postProcessingDir;
     std::string runDir;
-    std::string effectiveAreaDir;
-    std::string sensitivityDir;
     std::string csvDir;
     std::string histogramsDir;
 
@@ -66,6 +60,7 @@ private:
     void ExportTreeToCsv(const std::string& treeName,
                          const std::string& csvPath);
 
+    TH1* GetHist(const std::string& histName);
     TH1* GetHistOrThrow(const std::string& histName);
 
     void SaveHistPng(const std::string& histName,
@@ -76,7 +71,10 @@ private:
                      bool log_y = false,
                      bool weighted = false);
 
-    static double GeomCenter(double eLow, double eHigh);
+    [[nodiscard]] std::string AreaUnit() const;
+    [[nodiscard]] std::string AreaUnitRoot() const;
+
+    static double BinCentre(double eLow, double eHigh);
     static double EffAreaErrFromCounts(double n0, double n, double effArea);
 };
 

@@ -12,6 +12,7 @@
 #include <Randomize.hh>
 #include <G4AnalysisManager.hh>
 #include <G4Threading.hh>
+#include <array>
 #include <iomanip>
 #include <sstream>
 
@@ -41,16 +42,23 @@ public:
     void AddBoth(const G4int v) { bothTubs += v; }
 
     void AddGenerated(double E_MeV);
+    void AddTriggered(double E_MeV, int channel);
 
     [[nodiscard]] const ParticleCounts& GetCounts() const { return totals; }
 
-    [[nodiscard]] const std::vector<double>& GetEffArea() const { return effArea; }
+    [[nodiscard]] G4int GetNGenerated() const { return nGenerated; }
+    [[nodiscard]] G4int GetN1() const { return totals.tube_1 + totals.both; }
+    [[nodiscard]] G4int GetNTelescope() const { return totals.both; }
+
+    [[nodiscard]] const std::vector<double>& GetEffArea() const { return effArea[0]; }
+    [[nodiscard]] const std::vector<double>& GetEffAreaTelescope() const { return effArea[1]; }
 
 private:
     G4Accumulable<G4int> tube1Only{0};   // First && !Second
     G4Accumulable<G4int> tube2Only{0};   // !First && Second
     G4Accumulable<G4int> bothTubs{0};   // First && Second
     ParticleCounts totals{};
+    G4int nGenerated{0};
 
     double EminMeV{0.0};
     double EmaxMeV{0.0};
@@ -62,8 +70,8 @@ private:
     double invDlinearE{0.0};
 
     std::vector<G4Accumulable<G4double>> genCounts;
-    std::vector<G4Accumulable<G4double>> trigCounts;
-    std::vector<G4double> effArea;
+    std::array<std::vector<G4Accumulable<G4double>>, 2> trigCounts;
+    std::array<std::vector<G4double>, 2> effArea;
 
     [[nodiscard]] int FindBin(double E_MeV) const;
     [[nodiscard]] double BinCenterMeV(int i) const;

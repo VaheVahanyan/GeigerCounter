@@ -14,26 +14,37 @@ Loader::Loader(int argc, char** argv) {
     nBins = 1000;
     saveSecondaries = false;
 
-    for (int i = 0; i < argc; i++) {
-        if (std::string input(argv[i]); input == "-i" || input == "--input") {
-            macroFile = argv[i + 1];
+    auto value = [argc, argv](const int i) -> std::string {
+        if (i + 1 >= argc) {
+            G4Exception("Loader::Loader", "MISSING_ARGUMENT", FatalException,
+                        (std::string("Option ") + argv[i] + " requires a value").c_str());
+            return "";
+        }
+        return argv[i + 1];
+    };
+
+    for (int i = 1; i < argc; i++) {
+        const std::string input(argv[i]);
+
+        if (input == "-i" || input == "--input") {
+            macroFile = value(i);
             useUI = false;
         } else if (input == "-t" || input == "--threads") {
-            numThreads = std::stoi(argv[i + 1]);
+            numThreads = std::stoi(value(i));
         } else if (input == "--bins") {
-            nBins = std::stoi(argv[i + 1]);
+            nBins = std::stoi(value(i));
         } else if (input == "-noUI") {
             useUI = false;
         } else if (input == "-d" || input == "--detector") {
-            detectorType = argv[i + 1];
+            detectorType = value(i);
         } else if (input == "-f" || input == "--flux-type") {
-            fluxType = argv[i + 1];
+            fluxType = value(i);
         } else if (input == "--flux-dir" || input == "--f-dir" || input == "-fd") {
-            fluxDirection = argv[i + 1];
+            fluxDirection = value(i);
         } else if (input == "--save-secondaries") {
             saveSecondaries = true;
         } else if (input == "-o" || input == "--output-file") {
-            outputFile = argv[i + 1];
+            outputFile = value(i);
             outputFile += ".root";
         }
     }
@@ -69,25 +80,13 @@ Loader::Loader(int argc, char** argv) {
         Emax = std::min({energyTable.GetMaxE(), Emax});
     }
 
-    if (fluxDirection == "isotropic") {
-        dir = FluxDir::Isotropic;
-    } else if (fluxDirection == "isotropic_up") {
-        dir = FluxDir::Isotropic_up;
-    } else if (fluxDirection == "isotropic_down") {
-        dir = FluxDir::Isotropic_down;
-    } else if (fluxDirection == "vertical_up") {
-        dir = FluxDir::Vertical_up;
-    } else if (fluxDirection == "vertical_down") {
-        dir = FluxDir::Vertical_down;
-    } else if (fluxDirection == "horizontal") {
-        dir = FluxDir::Horizontal;
-    }
     if (fluxType == "Uniform") {
         std::string isLogStr = ReadValue("is_log:", configPath);
         isLogBin = isLogStr == "1" || isLogStr == "true";
     }
 
-    area = Area_cm2(10, 10, dir);
+    genSurface = GenSurface::For(fluxDirection);
+    area = genSurface.Norm_cm2();
     runManager->SetUserInitialization(new ActionInitialization(area));
     runManager->Initialize();
 
@@ -111,10 +110,12 @@ Loader::Loader(int argc, char** argv) {
         tube1Only = t1Only;
         tube2Only = t2Only;
         both = t1AndT2;
-        effArea = runAction->GetEffArea();
+        nGenerated = runAction->GetNGenerated();
+        effArea1 = runAction->GetEffArea();
+        effAreaTel = runAction->GetEffAreaTelescope();
     }
     SaveConfig();
-    // RunPostProcessing();
+    RunPostProcessing();
 }
 
 Loader::~Loader() {
@@ -165,7 +166,7 @@ std::vector<G4String> Split(const G4String& line) {
 
 
 void Loader::SaveConfig() const {
-    const int N = std::stoi(ReadValue("/run/beamOn", "../run.mac"));
+    const int N = nGenerated;
 
     EnergyRange er{};
     FluxType fType{};
@@ -216,7 +217,7 @@ void Loader::SaveConfig() const {
     RateResult rrReal{};
     bool rate_real_ok = true;
     try {
-        rrReal = computeRateReal(fType, fp, er, effArea, nBins);
+        rrReal = computeRateReal(fType, fp, er, effArea1, effAreaTel, nBins);
     }
     catch (const std::exception& ex) {
         rate_real_ok = false;
@@ -224,7 +225,9 @@ void Loader::SaveConfig() const {
 
     std::ostringstream buf;
 
-    buf << "N: " << N << "\n\n";
+    buf << "N_generated: " << N << "\n";
+    buf << "N_bins: " << nBins << "\n";
+    buf << "Log_binning: " << (isLogBin ? 1 : 0) << "\n\n";
     buf << "Flux_type: " << fluxType << "\n";
     buf << "Flux_dir: " << fluxDirection << "\n";
 
@@ -284,35 +287,62 @@ void Loader::SaveConfig() const {
     }
     buf << "}\n\n";
 
+    const bool isotropic = genSurface.IsIsotropic();
+    const std::string area_dim = isotropic ? " cm^2*sr" : " cm^2";
+    const std::string area_dim_inv = isotropic ? " cm^-2*sr^-1" : " cm^-2";
+
+    buf << "Detector:\n{\n\t";
+    buf << "gas_pressure: " << gasPressure / (atmosphere / 760.) << " torr,\n\t";
+    buf << "gas_temperature: " << gasTemperature / kelvin << " K,\n\t";
+    buf << "range_cut: " << counterRangeCut / um << " um,\n\t";
+    buf << "threshold: " << eThreshold / eV << " eV\n}\n\n";
+
+    buf << "Generation_surface:\n{\n\t";
+    buf << "shape: " << genSurface.ShapeName() << ",\n\t";
+    if (isotropic) {
+        buf << "R_gen: " << genSurface.Radius() / mm << " mm,\n\t";
+    } else {
+        buf << "half_u: " << genSurface.HalfU() / mm << " mm,\n\t";
+        buf << "half_v: " << genSurface.HalfV() / mm << " mm,\n\t";
+        buf << "standoff: " << genSurface.Standoff() / mm << " mm,\n\t";
+        buf << "axis: (" << genSurface.Axis().x() << ", " << genSurface.Axis().y()
+            << ", " << genSurface.Axis().z() << "),\n\t";
+    }
+    buf << "S_perp: " << genSurface.SPerp_cm2() << " cm^2,\n\t";
+    buf << "geometric_factor: " << genSurface.GeomFactor_cm2sr() << " cm^2*sr,\n\t";
+    buf << "normalisation: " << area << area_dim << "\n}\n\n";
+
     buf << "Counts:\n{\n\t";
-    buf << "Tube 1: " << tube1Only << "\n\t";
-    buf << "Tube 2: " << tube2Only << "\n\t";
-    buf << "Both: " << both << "\n}\n\n";
+    buf << "N_1: " << tube1Only + both << ",\n\t";
+    buf << "N_tel: " << both << ",\n\t";
+    buf << "tube1_only: " << tube1Only << ",\n\t";
+    buf << "tube2_only: " << tube2Only << ",\n\t";
+    buf << "both: " << both << "\n}\n\n";
 
-    buf << "Thresholds: " << eThreshold << " MeV\n";
+    buf << std::fixed << std::setprecision(6);
 
-    std::string area_dim = fluxDirection.find("isotropic") != std::string::npos ? " sr * cm^2" : " cm^2";
-    std::string area_dim_inv = fluxDirection.find("isotropic") != std::string::npos ? " sr^-1 * cm^-2" : " cm^-2";
+    buf << "Response:\n{\n\t";
+    if (N > 0) {
+        buf << "A_1: " << area * (tube1Only + both) / static_cast<double>(N) << area_dim << ",\n\t";
+        buf << "A_tel: " << area * both / static_cast<double>(N) << area_dim << "\n}\n\n";
+    } else {
+        buf << "A_1: NaN,\n\tA_tel: NaN\n}\n\n";
+    }
 
     buf << "Rates:\n{\n\t";
-    buf << std::fixed << std::setprecision(6);
     if (rate_ok) {
-        buf << "Area: " << area << area_dim << "\n\t";
-        buf << "Integral: " << rr.integral / (fluxType == "Galactic" ? 10000 : 1) << area_dim_inv << " * s^-1\n\t";
-        buf << "Ndot: " << rr.Ndot << " s^-1\n\t";
-        buf << "Rate_Crystal_only: " << rr.rateCrystal << " s^-1\n\t";
-        buf << "Rate_Both: " << rr.rateBoth << " s^-1\n\t";
+        buf << "Integral: " << rr.integral << area_dim_inv << " * s^-1,\n\t";
+        buf << "Ndot: " << rr.Ndot << " s^-1,\n\t";
+        buf << "Rate_1: " << rr.rate1 << " s^-1,\n\t";
+        buf << "Rate_tel: " << rr.rateTel << " s^-1,\n\t";
     } else {
-        buf << "Area: NaN\n\t";
-        buf << "Integral: NaN\n\t";
-        buf << "Ndot: NaN\n\t";
-        buf << "Rate_Crystal_only: NaN\n\t";
-        buf << "Rate_Both: NaN\n\t";
+        buf << "Integral: NaN,\n\tNdot: NaN,\n\tRate_1: NaN,\n\tRate_tel: NaN,\n\t";
     }
     if (rate_real_ok) {
-        buf << "Rate_Real: " << rrReal.rateRealCrystal << " s^-1\n";
+        buf << "Rate_real_1: " << rrReal.rateReal1 << " s^-1,\n\t";
+        buf << "Rate_real_tel: " << rrReal.rateRealTel << " s^-1\n";
     } else {
-        buf << "Rate_Real: NaN\n";
+        buf << "Rate_real_1: NaN,\n\tRate_real_tel: NaN\n";
     }
     buf << "}\n\n";
 
@@ -359,28 +389,30 @@ void Loader::RunPostProcessing() const {
         if (fluxType == "Galactic") {
             const std::string phi = ReadValue("phiMV:");
             part = ReadValue("particle:");
-            outDir += "_particle:" + part + "_phiMV:" + phi;
+            outDir += "_" + part + "_phiMV:" + phi;
         } else if (fluxType == "Uniform") {
             part = ReadValue("particles:");
-            outDir += "_particles:" + part;
+            outDir += "_" + part;
         } else if (fluxType == "PLAW" || fluxType == "COMP") {
             part = "gamma";
+            outDir += "_" + part;
         } else if (fluxType == "SEP") {
             part = "proton";
+            outDir += "_" + part;
+        } else if (fluxType == "Table") {
+            part = ReadValue("particle:");
+            outDir += "_" + part;
         }
+        outDir += "_" + fluxDirection;
         outDir = sanitize(outDir);
-        PostProcessing postProcessing(outDir, part);
+        part = sanitize(part);
+
+        PostProcessing postProcessing(outDir, part, area, genSurface.IsIsotropic());
 
         postProcessing.ExtractNtData();
         if (Emin < Emax) {
-            if (fluxDirection.find("isotropic") != std::string::npos)
-                postProcessing.SaveSensitivity();
-            else
-                postProcessing.SaveEffArea();
+            postProcessing.SaveResponse();
         }
-        postProcessing.SaveTrigEdepCsv();
-        postProcessing.SaveEdepCsv();
-        postProcessing.SavePrimaryCsv();
 
         std::cout << "Done!\n";
     }

@@ -32,6 +32,7 @@
 #include "Configuration.hh"
 #include "ActionInitialization.hh"
 #include "CountRates.hh"
+#include "GenSurface.hh"
 #include "PostProcessing.hh"
 
 #ifdef G4MULTITHREADED
@@ -46,9 +47,10 @@ class Loader {
     int numThreads;
     bool useUI;
 
-    G4double area;
-    std::vector<G4double> effArea;
-    std::vector<G4double> effAreaOpt;
+    GenSurface genSurface;
+    G4double area{};
+    std::vector<G4double> effArea1;
+    std::vector<G4double> effAreaTel;
 
 #ifdef G4MULTITHREADED
     G4MTRunManager *runManager;
@@ -67,9 +69,7 @@ private:
     G4int tube1Only{};
     G4int tube2Only{};
     G4int both{};
-    G4int crystalAndVetoOpt{};
-
-    FluxDir dir{};
+    G4int nGenerated{};
 
     [[nodiscard]] std::string ReadValue(const std::string &, const std::string &) const;
     void SaveConfig() const;

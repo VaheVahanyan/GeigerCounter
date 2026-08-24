@@ -44,15 +44,19 @@ struct RateCounts {
     int tube1Only = 0;
     int tube2Only = 0;
     int both = 0;
+
+    [[nodiscard]] int N1() const { return tube1Only + both; }
+    [[nodiscard]] int NTelescope() const { return both; }
 };
 
 struct RateResult {
     double area = 0.0;
-    double integral = 0.0;        // ∫ flux(E) dE
-    double Ndot = 0.0;            // A_eff * integral
-    double rateCrystal = 0.0;     // crystalOnly / (N / Ndot)
-    double rateBoth = 0.0;        // (crystalOnly+crystalAndVeto) / (N / Ndot)
-    double rateRealCrystal = 0.0; // ∫ flux(E) * Aeff(E) dE
+    double integral = 0.0;     // ∫ flux(E) dE
+    double Ndot = 0.0;         // area * integral
+    double rate1 = 0.0;        // counter 1 singles, N1/N_gen * Ndot
+    double rateTel = 0.0;      // coincidence, Ntel/N_gen * Ndot
+    double rateReal1 = 0.0;    // ∫ flux(E) * A_1(E) dE
+    double rateRealTel = 0.0;  // ∫ flux(E) * A_tel(E) dE
 };
 
 double fluxPLAW(double E, double A, double alpha, double E_piv);
@@ -67,11 +71,9 @@ double fluxUniform(double E);
 
 double fluxGalactic(double E);
 
+double fluxGalactic_cm2_MeV(double E_MeV, double phiMV, const std::string& name);
+
 double J_proton(double E_GeV);
-
-enum class FluxDir { Vertical_down, Vertical_up, Horizontal, Isotropic_up, Isotropic_down, Isotropic };
-
-double Area_cm2(double R_mm, double H_mm, FluxDir dir);
 
 double integrateAdaptiveSimpson(const std::function<double(double)>& f,
                                 double a, double b,
@@ -88,7 +90,8 @@ RateResult computeRate(FluxType type,
 RateResult computeRateReal(FluxType type,
                            const FluxParams& p,
                            EnergyRange eRange,
-                           const std::vector<double>& Aeff,
+                           const std::vector<double>& Aeff1,
+                           const std::vector<double>& AeffTel,
                            int nBins);
 
 

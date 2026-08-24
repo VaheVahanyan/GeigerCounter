@@ -26,7 +26,7 @@ G4bool SensitiveDetector::ProcessHits(G4Step *step, G4TouchableHistory *) {
     }
 
     const G4VTouchable *touch = step->GetPreStepPoint()->GetTouchable();
-    const int volumeID = touch->GetVolume()->GetCopyNo();
+    const int volumeID = touch->GetHistoryDepth() >= 1 ? touch->GetCopyNumber(1) : touch->GetCopyNumber(0);
 
     const G4double t = step->GetPreStepPoint()->GetGlobalTime();
 

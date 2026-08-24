@@ -15,7 +15,6 @@ namespace Configuration
 
     inline G4double eThreshold{0 * MeV};
 
-    inline G4bool withLid{true};
     inline G4double gasPressure{100. * atmosphere / 760.};
     inline G4double gasTemperature{293.15 * kelvin};
     inline G4double counterRangeCut{1 * um};

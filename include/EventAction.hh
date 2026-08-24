@@ -19,7 +19,6 @@
 #include "Configuration.hh"
 #include "AnalysisManager.hh"
 #include "SDHit.hh"
-#include "SiPMOpticalSD.hh"
 
 class G4Event;
 class Geometry;
@@ -64,15 +63,12 @@ public:
 private:
     void WritePrimaries_(int eventID);
     int WriteInteractions_(int eventID);
-    int WriteEdepFromSD_(const G4Event *evt, int eventID);
-
-    void MarkTube1() { hasTube1 = true; }
-    void MarkTube2() { hasTube2 = true; }
+    int ReadEdepFromSD_(const G4Event *evt);
 
     AnalysisManager *analysisManager = nullptr;
 
-    std::vector<std::tuple<G4String, int, G4String>> detMap;
-    std::vector<int> HCIDs;
+    int edepHCID = -1;
+    double edepTube[2] = {0.0, 0.0};
 
     int nPrimaries = 0;
     int nInteractions = 0;

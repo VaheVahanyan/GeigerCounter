@@ -4,10 +4,6 @@ using namespace Sizes;
 using namespace Configuration;
 
 EventAction::EventAction(AnalysisManager* an, RunAction* r) : analysisManager(an), run(r) {
-    detMap = {
-        {"CounterSD/EdepHits", 0, "GeigerCounter"},
-    };
-    HCIDs.assign(detMap.size(), -1);
 }
 
 void EventAction::BeginOfEventAction(const G4Event*) {
@@ -16,6 +12,8 @@ void EventAction::BeginOfEventAction(const G4Event*) {
     nEdepHits = 0;
     hasTube1 = false;
     hasTube2 = false;
+    edepTube[0] = 0.0;
+    edepTube[1] = 0.0;
 }
 
 void EventAction::EndOfEventAction(const G4Event* evt) {
@@ -36,15 +34,24 @@ void EventAction::EndOfEventAction(const G4Event* evt) {
     nInteractions = WriteInteractions_(eventID);
     interBuf.clear();
 
-    nEdepHits = WriteEdepFromSD_(evt, eventID);
+    nEdepHits = ReadEdepFromSD_(evt);
 
     if (saveSecondaries) {
         analysisManager->FillEventRow(eventID, nPrimaries, nInteractions, nEdepHits);
     }
 
-    if (run and hasTube1 && !hasTube2) run->AddTube1Only(1);
-    if (run and !hasTube1 && hasTube2) run->AddTube2Only(1);
-    if (run and hasTube1 && hasTube2) run->AddBoth(1);
+    if (hasTube1 || hasTube2) {
+        analysisManager->FillEdepRow(eventID, primaryE_MeV, edepTube[0] / eV, edepTube[1] / eV);
+    }
+
+    if (run) {
+        if (hasTube1 && !hasTube2) run->AddTube1Only(1);
+        if (!hasTube1 && hasTube2) run->AddTube2Only(1);
+        if (hasTube1 && hasTube2) run->AddBoth(1);
+
+        if (hasTube1) run->AddTriggered(primaryE_MeV, 0);
+        if (hasTube1 && hasTube2) run->AddTriggered(primaryE_MeV, 1);
+    }
 }
 
 void EventAction::WritePrimaries_(int eventID) {
@@ -66,44 +73,31 @@ int EventAction::WriteInteractions_(int eventID) {
     return static_cast<int>(interBuf.size());
 }
 
-int EventAction::WriteEdepFromSD_(const G4Event* evt, int eventID) {
+int EventAction::ReadEdepFromSD_(const G4Event* evt) {
     auto* hce = evt->GetHCofThisEvent();
     if (!hce) return 0;
 
-    auto* sdm = G4SDManager::GetSDMpointer();
+    if (edepHCID < 0) {
+        edepHCID = G4SDManager::GetSDMpointer()->GetCollectionID("CounterSD/EdepHits");
+    }
+    if (edepHCID < 0) return 0;
 
-    for (size_t i = 0; i < detMap.size(); ++i) {
-        if (HCIDs[i] < 0) {
-            const auto& hcName = std::get<0>(detMap[i]);
-            HCIDs[i] = sdm->GetCollectionID(hcName);
-        }
+    auto* hc = dynamic_cast<SDHitCollection*>(hce->GetHC(edepHCID));
+    if (!hc) return 0;
+
+    const auto N = hc->GetSize();
+    for (unsigned j = 0; j < N; ++j) {
+        const auto* h = (*hc)[j];
+        if (h->volumeID < 0 || h->volumeID > 1) continue;
+        edepTube[h->volumeID] += h->edep;
     }
 
-    int nHitsTotal = 0;
-
-    for (size_t i = 0; i < detMap.size(); ++i) {
-        const int hcID = HCIDs[i];
-        if (hcID < 0) continue;
-
-        auto* hc = dynamic_cast<SDHitCollection*>(hce->GetHC(hcID));
-        if (!hc) continue;
-
-        const auto& det_name = std::get<2>(detMap[i]);
-
-        const auto N = hc->GetSize();
-        for (unsigned j = 0; j < N; ++j) {
-            auto* h = (*hc)[j];
-            double edep_MeV = h->edep / MeV;
-
-            if (edep_MeV <= eThreshold) edep_MeV = 0;
-            if (edep_MeV > 0.0) {
-                if (det_name == "GeigerCounter") MarkTube1();
-                else if (det_name == "GeigerCounter") MarkTube2();
-                analysisManager->FillEdepRow(eventID, det_name, edep_MeV);
-            }
-        }
-        nHitsTotal += static_cast<int>(N);
+    for (auto& e : edepTube) {
+        if (e <= eThreshold) e = 0.0;
     }
 
-    return nHitsTotal;
+    hasTube1 = edepTube[0] > 0.0;
+    hasTube2 = edepTube[1] > 0.0;
+
+    return static_cast<int>(N);
 }
