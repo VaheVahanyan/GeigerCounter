@@ -1,0 +1,6 @@
+particles: gamma
+fractions: 1.
+is_log: 0
+
+E_min: 0.1
+E_max: 10

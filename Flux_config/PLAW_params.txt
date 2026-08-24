@@ -1,0 +1,10 @@
+# alpha (power-law index): negative value, can be found in Fermi-GBM Catalog
+# A (normalization) units: s^−1 cm^−2 MeV^−1
+# Energy units: MeV
+
+A: 9.3607336
+alpha: -1.411103
+E_piv: 0.1
+
+E_min: 0.01
+E_max: 100

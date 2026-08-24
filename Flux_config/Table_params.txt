@@ -1,0 +1,8 @@
+# Differential flux units: s^-1 * cm^-2 * (MeV/nuc)^-1 OR s^-1 * cm^-2 * sr^-1 * (MeV/nuc)^-1
+# Energy units: MeV
+
+table_path: ../TableSpectrum/flare_M2.csv
+particle: gamma
+
+E_min: 0.268420812940632
+E_max: 286.329624849177
