@@ -8,14 +8,11 @@ PrimaryGeneratorAction::PrimaryGeneratorAction(G4String fDir, const G4String& fl
     genSurface = GenSurface::For(fluxDirection);
     center = genSurface.Origin();
 
-    std::vector<G4String> fluxDirList = {
-        "isotropic", "isotropic_up", "isotropic_down", "vertical_up", "vertical_down", "horizontal"
-    };
+    std::vector<G4String> fluxDirList = {"isotropic", "isotropic_up", "isotropic_down", "flat"};
     if (std::find(fluxDirList.begin(), fluxDirList.end(), fluxDirection) == fluxDirList.end()) {
         G4Exception("PrimaryGeneratorAction::GeneratePrimaries", "FluxDirection", FatalException,
                     ("Flux direction is not implemented: " + fluxDirection +
-                        ".\nAvailable flux directions: isotropic, isotropic_up, isotropic_down, vertical_up," +
-                        " vertical_down, horizontal").c_str());
+                        ".\nAvailable flux directions: isotropic, isotropic_up, isotropic_down, flat").c_str());
     }
     std::vector<G4String> fluxTypeList = {"Uniform", "PLAW", "COMP", "SEP", "Galactic", "Table"};
     if (std::find(fluxTypeList.begin(), fluxTypeList.end(), fluxType) == fluxTypeList.end()) {
@@ -47,6 +44,8 @@ PrimaryGeneratorAction::~PrimaryGeneratorAction() {
 
 
 void PrimaryGeneratorAction::GenerateOnSphere(G4ThreeVector& pos, G4ThreeVector& dir) const {
+    const G4ThreeVector InstrumentUp = GenSurface::InstrumentUp();
+
     G4double u = 0;
     if (fluxDirection == "isotropic") {
         u = 2.0 * G4UniformRand() - 1.0; // cos(theta) ~ U[-1,1]
@@ -57,12 +56,12 @@ void PrimaryGeneratorAction::GenerateOnSphere(G4ThreeVector& pos, G4ThreeVector&
     }
     const G4double phi = 2.0 * M_PI * G4UniformRand();
     const G4double l = std::sqrt(std::max(0.0, 1.0 - u * u));
-    const G4ThreeVector rhat(l * std::cos(phi), l * std::sin(phi), u);
+    const G4ThreeVector rhat(l * std::cos(phi), u, l * std::sin(phi));
 
     pos = center + genSurface.Radius() * rhat;
 
     const G4ThreeVector z = rhat.unit();
-    const G4ThreeVector a = std::fabs(z.z()) < 0.999 ? G4ThreeVector(0, 0, 1) : G4ThreeVector(1, 0, 0);
+    const G4ThreeVector a = std::fabs(z.y()) < 0.999 ? InstrumentUp : G4ThreeVector(1, 0, 0);
     const G4ThreeVector x = z.cross(a).unit();
     const G4ThreeVector y = z.cross(x).unit();
 

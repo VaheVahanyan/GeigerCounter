@@ -6,7 +6,6 @@ Loader::Loader(int argc, char** argv) {
     numThreads = G4Threading::G4GetNumberOfCores();
     useUI = true;
     macroFile = "../run.mac";
-    detectorType = "CsI";
     fluxType = "Uniform";
     fluxDirection = "isotropic";
     eThreshold = 0 * MeV;
@@ -35,18 +34,28 @@ Loader::Loader(int argc, char** argv) {
             nBins = std::stoi(value(i));
         } else if (input == "-noUI") {
             useUI = false;
-        } else if (input == "-d" || input == "--detector") {
-            detectorType = value(i);
         } else if (input == "-f" || input == "--flux-type") {
             fluxType = value(i);
         } else if (input == "--flux-dir" || input == "--f-dir" || input == "-fd") {
             fluxDirection = value(i);
+        } else if (input == "-g" || input == "--geom") {
+            geometryType = value(i);
+        } else if (input == "--theta") {
+            beamTheta = std::stod(value(i)) * deg;
+        } else if (input == "--phi") {
+            beamPhi = std::stod(value(i)) * deg;
         } else if (input == "--save-secondaries") {
             saveSecondaries = true;
         } else if (input == "-o" || input == "--output-file") {
             outputFile = value(i);
             outputFile += ".root";
         }
+    }
+
+    if (geometryType != "full" && geometryType != "telescope" && geometryType != "single") {
+        G4Exception("Loader::Loader", "GEOMETRY_TYPE", FatalException,
+                    ("Unknown geometry: " + geometryType +
+                        ".\nAvailable geometries: full, telescope, single").c_str());
     }
 
     configPath = "../Flux_config/" + fluxType + "_params.txt";
@@ -292,7 +301,11 @@ void Loader::SaveConfig() const {
     const std::string area_dim_inv = isotropic ? " cm^-2*sr^-1" : " cm^-2";
 
     buf << "Detector:\n{\n\t";
-    buf << "gas_pressure: " << gasPressure / (atmosphere / 760.) << " torr,\n\t";
+    buf << "geometry: " << geometryType << ",\n\t";
+    const G4Material* gas = G4Material::GetMaterial("CounterGas");
+    buf << "gas_composition: " << (gas ? gas->GetChemicalFormula() : G4String("")) << ",\n\t";
+    buf << "gas_density: " << gasDensity / (mg / cm3) << " mg/cm^3,\n\t";
+    buf << "gas_pressure: " << (gas ? gas->GetPressure() / (atmosphere / 760.) : 0.) << " torr,\n\t";
     buf << "gas_temperature: " << gasTemperature / kelvin << " K,\n\t";
     buf << "range_cut: " << counterRangeCut / um << " um,\n\t";
     buf << "threshold: " << eThreshold / eV << " eV\n}\n\n";
@@ -302,6 +315,8 @@ void Loader::SaveConfig() const {
     if (isotropic) {
         buf << "R_gen: " << genSurface.Radius() / mm << " mm,\n\t";
     } else {
+        buf << "theta: " << genSurface.Theta() / deg << " deg,\n\t";
+        buf << "phi: " << genSurface.Phi() / deg << " deg,\n\t";
         buf << "half_u: " << genSurface.HalfU() / mm << " mm,\n\t";
         buf << "half_v: " << genSurface.HalfV() / mm << " mm,\n\t";
         buf << "standoff: " << genSurface.Standoff() / mm << " mm,\n\t";
@@ -309,6 +324,7 @@ void Loader::SaveConfig() const {
             << ", " << genSurface.Axis().z() << "),\n\t";
     }
     buf << "S_perp: " << genSurface.SPerp_cm2() << " cm^2,\n\t";
+    buf << "S_projected: " << genSurface.ProjectedArea_cm2() << " cm^2,\n\t";
     buf << "geometric_factor: " << genSurface.GeomFactor_cm2sr() << " cm^2*sr,\n\t";
     buf << "normalisation: " << area << area_dim << "\n}\n\n";
 
@@ -351,7 +367,7 @@ void Loader::SaveConfig() const {
         return ss;
     };
 
-    std::string filename = "info_" + detectorType + "_" + fluxType;
+    std::string filename = "info_" + fluxType;
     if (fluxType == "Galactic") {
         const std::string part = ReadValue("particle:");
         const std::string phi = ReadValue("phiMV:");
@@ -403,7 +419,7 @@ void Loader::RunPostProcessing() const {
             part = ReadValue("particle:");
             outDir += "_" + part;
         }
-        outDir += "_" + fluxDirection;
+        outDir += "_" + geometryType + "_" + GenSurface::DirectionTag();
         outDir = sanitize(outDir);
         part = sanitize(part);
 

@@ -251,7 +251,8 @@ void PostProcessing::SaveResponse() {
     SaveHistPng(responseHist + "Tel", (fs::path(histogramsDir) / "response_telescope.png").string(),
                 responseName + " vs Energy, telescope", responseName + " [" + AreaUnitRoot() + "]", false);
 
-    const std::string csvName = "A_eff_" + particleName + "_" + fluxDirection + ".csv";
+    const std::string csvName = "A_eff_" + particleName + "_" + geometryType + "_"
+                                + GenSurface::DirectionTag() + ".csv";
     const std::string outPath = (fs::path(csvDir) / csvName).string();
 
     std::ofstream out(outPath);
@@ -260,7 +261,10 @@ void PostProcessing::SaveResponse() {
     }
 
     out << "# particle: " << particleName << "\n";
+    out << "# geometry: " << geometryType << "\n";
     out << "# flux_direction: " << fluxDirection << "\n";
+    out << "# theta_deg: " << beamTheta / deg << "\n";
+    out << "# phi_deg: " << beamPhi / deg << "\n";
     out << "# normalisation: " << norm << " " << AreaUnit() << "\n";
     out << "# energy unit: MeV, area unit: " << AreaUnit() << "\n";
     out << "E_low,E_high,E_centre,N_gen,N_trig_1,N_trig_tel,A_1,dA_1,A_tel,dA_tel\n";

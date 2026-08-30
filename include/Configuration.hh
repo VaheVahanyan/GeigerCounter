@@ -8,14 +8,16 @@
 
 namespace Configuration
 {
-    inline G4String detectorType{"CsI"};
+    inline G4String geometryType{"full"};
 
     inline G4String fluxType{"Uniform"};
     inline G4String fluxDirection{"isotropic"};
+    inline G4double beamTheta{0.};
+    inline G4double beamPhi{0.};
 
     inline G4double eThreshold{0 * MeV};
 
-    inline G4double gasPressure{100. * atmosphere / 760.};
+    inline G4double gasDensity{0.5597 * mg / cm3};
     inline G4double gasTemperature{293.15 * kelvin};
     inline G4double counterRangeCut{1 * um};
     inline G4double cutsEnergyMin{250 * eV};

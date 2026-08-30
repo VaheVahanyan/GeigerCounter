@@ -14,7 +14,7 @@ void Detector::DefineMaterials() {
     auto* elC = nist->FindOrBuildElement("C");
     auto* elNe = nist->FindOrBuildElement("Ne");
     auto* elAr = nist->FindOrBuildElement("Ar");
-    auto* elBr = nist->FindOrBuildElement("Br");
+    auto* elCl = nist->FindOrBuildElement("Cl");
 
     G4Material* SiO2 = nist->FindOrBuildMaterial("G4_SILICON_DIOXIDE");
     G4Material* polystyrene = nist->FindOrBuildMaterial("G4_POLYSTYRENE");
@@ -25,18 +25,19 @@ void Detector::DefineMaterials() {
     contactMat = nist->FindOrBuildMaterial("G4_Ni");
 
     {
-        const G4int nNe = 494;
-        const G4int nAr = 5;
-        const G4int nBr2 = 1;
-        const G4int nMolecules = nNe + nAr + nBr2;
+        const G4int nNe = 974;
+        const G4int nAr = 25;
+        const G4int nCl2 = 1;
+        const G4int nMolecules = nNe + nAr + nCl2;
 
-        const G4double molarMass = (nNe * elNe->GetA() + nAr * elAr->GetA() + nBr2 * 2 * elBr->GetA()) / nMolecules;
-        const G4double gasDensity = gasPressure * molarMass / (Avogadro * k_Boltzmann * gasTemperature);
+        const G4double molarMass = (nNe * elNe->GetA() + nAr * elAr->GetA() + nCl2 * 2 * elCl->GetA()) / nMolecules;
+        const G4double gasPressure = gasDensity * Avogadro * k_Boltzmann * gasTemperature / molarMass;
 
         gasMat = new G4Material("CounterGas", gasDensity, 3, kStateGas, gasTemperature, gasPressure);
         gasMat->AddElementByNumberOfAtoms(elNe, nNe);
         gasMat->AddElementByNumberOfAtoms(elAr, nAr);
-        gasMat->AddElementByNumberOfAtoms(elBr, nBr2 * 2);
+        gasMat->AddElementByNumberOfAtoms(elCl, nCl2 * 2);
+        gasMat->SetChemicalFormula("97.4% Ne + 2.5% Ar + 0.1% Cl2");
     }
 
     // Box
@@ -89,11 +90,11 @@ void Detector::DefineVisual() {
 
 
 void Detector::Construct() {
-    ConstructBox();
+    if (geometryType == "full") ConstructBox();
     ConstructGeigerTube();
     ConstructRetainer();
     ConstructFilter();
-    ConstructBoard();
+    if (geometryType == "full") ConstructBoard();
 }
 
 std::vector<G4LogicalVolume*> Detector::GetSensitiveLV() const {
@@ -187,41 +188,36 @@ void Detector::ConstructGeigerTube() {
 
     ConstructCounterRegion();
 
-    new G4PVPlacement(rotMat,
-                      G4ThreeVector(0, Box::width - (Box::thickness + Box::cavity1Gap) * 2 - GeigerCounter::radius, 0),
+    const G4double tubeUpperY = Box::width - (Box::thickness + Box::cavity1Gap) * 2 - GeigerCounter::radius;
+    const G4double tubeLowerY = Box::width - (Box::thickness + Box::cavity1Gap + Filter::width + Filter::gap * 2) * 2
+                                - GeigerCounter::radius * 3;
+    const G4double contactX = GeigerCounter::length + GeigerCounter::contactLength;
+    const G4bool twoTubes = geometryType != "single";
+
+    new G4PVPlacement(rotMat, G4ThreeVector(0, tubeUpperY, 0),
                       geigerTubeLV, "GeigerTubePVP", detContainerLV, false, 0, true);
 
-    new G4PVPlacement(rotMat,
-                      G4ThreeVector(0, Box::width - (Box::thickness + Box::cavity1Gap + Filter::width + Filter::gap * 2)
-                                    * 2 - GeigerCounter::radius * 3, 0), geigerTubeLV, "GeigerTubePVP", detContainerLV,
-                      false, 1, true);
+    if (twoTubes) {
+        new G4PVPlacement(rotMat, G4ThreeVector(0, tubeLowerY, 0),
+                          geigerTubeLV, "GeigerTubePVP", detContainerLV, false, 1, true);
+    }
 
     G4VSolid* contact = new G4Tubs("Contact", 0, GeigerCounter::contactRadius, GeigerCounter::contactLength, 0,
                                    360 * deg);
     contactLV = new G4LogicalVolume(contact, contactMat, "ContactLV");
     contactLV->SetVisAttributes(visContact);
 
-    new G4PVPlacement(rotMat,
-                      G4ThreeVector(GeigerCounter::length + GeigerCounter::contactLength,
-                                    Box::width - (Box::thickness + Box::cavity1Gap) * 2 - GeigerCounter::radius, 0),
+    new G4PVPlacement(rotMat, G4ThreeVector(contactX, tubeUpperY, 0),
                       contactLV, "ContactPVP", detContainerLV, false, 0, true);
-
-    new G4PVPlacement(rotMat,
-                      G4ThreeVector(GeigerCounter::length + GeigerCounter::contactLength,
-                                    Box::width - (Box::thickness + Box::cavity1Gap + Filter::width + Filter::gap * 2)
-                                    * 2 - GeigerCounter::radius * 3, 0), contactLV, "ContactPVP", detContainerLV,
-                      false, 1, true);
-
-    new G4PVPlacement(rotMat,
-                      G4ThreeVector(-(GeigerCounter::length + GeigerCounter::contactLength),
-                                    Box::width - (Box::thickness + Box::cavity1Gap) * 2 - GeigerCounter::radius, 0),
+    new G4PVPlacement(rotMat, G4ThreeVector(-contactX, tubeUpperY, 0),
                       contactLV, "ContactPVP", detContainerLV, false, 2, true);
 
-    new G4PVPlacement(rotMat,
-                      G4ThreeVector(-(GeigerCounter::length + GeigerCounter::contactLength),
-                                    Box::width - (Box::thickness + Box::cavity1Gap + Filter::width + Filter::gap * 2)
-                                    * 2 - GeigerCounter::radius * 3, 0), contactLV, "ContactPVP", detContainerLV,
-                      false, 3, true);
+    if (twoTubes) {
+        new G4PVPlacement(rotMat, G4ThreeVector(contactX, tubeLowerY, 0),
+                          contactLV, "ContactPVP", detContainerLV, false, 1, true);
+        new G4PVPlacement(rotMat, G4ThreeVector(-contactX, tubeLowerY, 0),
+                          contactLV, "ContactPVP", detContainerLV, false, 3, true);
+    }
 }
 
 void Detector::ConstructFilter() {

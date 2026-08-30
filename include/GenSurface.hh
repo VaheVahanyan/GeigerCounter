@@ -17,6 +17,9 @@ public:
 
     static G4ThreeVector PayloadHalfSize();
     static G4ThreeVector PayloadCentre();
+    static G4ThreeVector InstrumentUp() { return {0., 1., 0.}; }
+    static G4ThreeVector Arrival(G4double theta, G4double phi);
+    static G4String DirectionTag();
     static G4double Margin() { return 5. * mm; }
 
     [[nodiscard]] G4bool IsIsotropic() const { return shape == Shape::Sphere; }
@@ -26,6 +29,8 @@ public:
     [[nodiscard]] G4double HalfU() const { return halfU; }
     [[nodiscard]] G4double HalfV() const { return halfV; }
     [[nodiscard]] G4double Standoff() const { return standoff; }
+    [[nodiscard]] G4double Theta() const { return theta; }
+    [[nodiscard]] G4double Phi() const { return phi; }
     [[nodiscard]] const G4ThreeVector& Origin() const { return origin; }
 
     [[nodiscard]] const G4ThreeVector& Axis() const { return axis; }
@@ -33,6 +38,7 @@ public:
     [[nodiscard]] const G4ThreeVector& V() const { return v; }
 
     [[nodiscard]] G4double SPerp_cm2() const;
+    [[nodiscard]] G4double ProjectedArea_cm2() const;
     [[nodiscard]] G4double GeomFactor_cm2sr() const;
     [[nodiscard]] G4double Norm_cm2() const;
 
@@ -46,6 +52,8 @@ private:
     G4double halfU{0.};
     G4double halfV{0.};
     G4double standoff{0.};
+    G4double theta{0.};
+    G4double phi{0.};
 
     G4ThreeVector origin{0., 0., 0.};
     G4ThreeVector axis{0., 0., -1.};
