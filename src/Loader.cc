@@ -101,6 +101,8 @@ Loader::Loader(int argc, char** argv) {
 
     visManager = new G4VisExecutive;
     visManager->Initialize();
+    genSurfaceVis = new GenSurfaceVis;
+    visManager->RegisterRunDurationUserVisAction("GenSurface", genSurfaceVis, GenSurfaceVis::Extent());
     G4UImanager* UImanager = G4UImanager::GetUIpointer();
 
     if (!useUI) {
@@ -130,6 +132,7 @@ Loader::Loader(int argc, char** argv) {
 Loader::~Loader() {
     delete runManager;
     delete visManager;
+    delete genSurfaceVis;
 }
 
 

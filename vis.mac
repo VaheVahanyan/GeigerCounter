@@ -25,6 +25,7 @@
 /vis/modeling/trajectories/drawByParticleID-0/set GenericIon blue
 
 /vis/scene/add/hits
+/vis/scene/add/userAction
 
 /vis/scene/endOfEventAction accumulate
 

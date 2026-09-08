@@ -33,6 +33,7 @@
 #include "ActionInitialization.hh"
 #include "CountRates.hh"
 #include "GenSurface.hh"
+#include "GenSurfaceVis.hh"
 #include "PostProcessing.hh"
 
 #ifdef G4MULTITHREADED
@@ -59,6 +60,7 @@ class Loader {
 #endif
 
     G4VisManager *visManager;
+    GenSurfaceVis *genSurfaceVis;
 
 public:
     Loader(int argc, char **argv);
